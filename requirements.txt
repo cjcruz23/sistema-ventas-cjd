@@ -1,0 +1,8 @@
+streamlit
+supabase
+pandas
+plotly
+fpdf
+pillow
+streamlit-drawable-canvas
+requests
