@@ -411,7 +411,7 @@ elif choice == "Registrar Cliente":
 
 elif choice == "Nueva Venta":
     st.header("Generar Venta y Registro de Costos")
-    # Mostrar la sede en la que se está operando
+       # Mostrar la sede en la que se está operando
     st.info(f"Registrando venta para la sede: **{nombre_sede}**")
     
     if st.session_state.get('venta_finalizada'):
@@ -448,6 +448,13 @@ elif choice == "Nueva Venta":
             
             if st.button("Finalizar y Registrar Venta", type="primary"):
                 if precio > 0 and art:
+                    
+                    # -------------------------------------------------------------------------
+                    # SOLUCIÓN TÉCNICA: Definición de variable para evitar NameError en local
+                    # Extrae el ID del usuario logueado almacenado en el estado de la sesión
+                    # -------------------------------------------------------------------------
+                    id_del_vendedor_actual = st.session_state.user_perfil.get('id')
+                    
                     # Se agrega 'sede_id' al insert de la tabla ventas
                     v_ins = supabase.table("ventas").insert({
                         "cliente_id": dat_c['id'], 
@@ -459,6 +466,7 @@ elif choice == "Nueva Venta":
                         "gasto_transporte": c_tran, 
                         "gasto_papeleria": c_pape, 
                         "gasto_otros": c_otro,
+                        "vendedor_id": id_del_vendedor_actual,
                         "sede_id": mi_sede_id  # Inyección de la sede del usuario actual
                     }).execute()
                     
