@@ -14,8 +14,8 @@ import urllib.parse
 import json
 
 # 1. CONFIGURACIÓN DE CONEXIÓN
-URL_SUPABASE = "https://ipteqcymqujhszahlski.supabase.co"
-KEY_SUPABASE = "sb_publishable_5lOnTzxb3XXwZxiKj-QVYw_7GmiIaMD"
+URL_SUPABASE = st.secrets["URL_SUPABASE"]
+KEY_SUPABASE = st.secrets["KEY_SUPABASE"]
 
 @st.cache_resource
 def init_connection():
