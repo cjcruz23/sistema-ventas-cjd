@@ -406,7 +406,21 @@ elif choice == "Registrar Cliente":
         with c2: d = st.text_input("Dirección de Residencia"); t = st.text_input("Teléfono")
         if st.form_submit_button("Guardar Cliente"):
             if n and c_cc:
-                supabase.table("clientes").insert({"nombre": n, "cedula": c_cc, "direccion": d, "telefono": t}).execute()
+                
+                # -------------------------------------------------------------------------
+                # INYECCIÓN SOLICITADA: Extraer el ID del vendedor logueado desde el perfil
+                # -------------------------------------------------------------------------
+                id_del_vendedor_actual = st.session_state.user_perfil.get('id')
+                
+                # Se agrega 'vendedor_id' al diccionario de inserción nativo
+                supabase.table("clientes").insert({
+                    "nombre": n, 
+                    "cedula": c_cc, 
+                    "direccion": d, 
+                    "telefono": t,
+                    "vendedor_id": id_del_vendedor_actual  # 👈 Amarre físico del cliente con el vendedor
+                }).execute()
+                
                 st.success("Cliente guardado exitosamente.")
 
 elif choice == "Nueva Venta":
@@ -860,7 +874,16 @@ elif choice == "Configuración y Datos":
     # --- TAB 1: MAESTRO DE CLIENTES (Accesible para todos) ---
     with tabs[0]:
         st.subheader("Edición de Perfiles de Clientes")
-        res_cli = supabase.table("clientes").select("*").execute()
+        
+        # -------------------------------------------------------------------------
+        # AJUSTE DE FILTRADO: El Administrador ve todo, el Vendedor solo lo suyo
+        # -------------------------------------------------------------------------
+        if es_admin:
+            res_cli = supabase.table("clientes").select("*").execute()
+        else:
+            id_del_vendedor_actual = st.session_state.user_perfil.get('id')
+            res_cli = supabase.table("clientes").select("*").eq("vendedor_id", id_del_vendedor_actual).execute()
+        
         if res_cli.data:
             df_cli = pd.DataFrame(res_cli.data)
             nombres_clientes = sorted(df_cli['nombre'].tolist())
