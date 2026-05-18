@@ -408,33 +408,25 @@ elif choice == "Registrar Cliente":
             if n and c_cc:
                 
                 # -------------------------------------------------------------------------
-                # AJUSTE ADICIONAL: Verificar si la cédula ya existe en la empresa a nivel global
+                # INYECCIÓN SOLICITADA: Extraer el ID del vendedor logueado desde el perfil
                 # -------------------------------------------------------------------------
-                existe_cliente = supabase.table("clientes").select("id").eq("cedula", c_cc).execute()
+                id_del_vendedor_actual = st.session_state.user_perfil.get('id')
                 
-                if existe_cliente.data:
-                    # Si el registro ya existe en el sistema, frena el insert y avisa al vendedor
-                    st.error("⚠️ Este cliente ya se encuentra registrado en el sistema de la empresa. Por políticas de cartera, no puede ser duplicado.")
-                else:
-                    # -------------------------------------------------------------------------
-                    # INYECCIÓN SOLICITADA: Extraer el ID del vendedor logueado desde el perfil
-                    # -------------------------------------------------------------------------
-                    id_del_vendedor_actual = st.session_state.user_perfil.get('id')
-                    
-                    # Se agrega 'vendedor_id' al diccionario de inserción nativo
-                    supabase.table("clientes").insert({
-                        "nombre": n, 
-                        "cedula": c_cc, 
-                        "direccion": d, 
-                        "telefono": t,
-                        "vendedor_id": id_del_vendedor_actual  # 👈 Amarre físico del cliente con el vendedor
-                    }).execute()
-                    
-                    st.success("Cliente guardado exitosamente.")
+                # Se agrega 'vendedor_id' al diccionario de inserción nativo
+                # Al retirar la validación previa, se permite la duplicidad int8 por vendedor
+                supabase.table("clientes").insert({
+                    "nombre": n, 
+                    "cedula": c_cc, 
+                    "direccion": d, 
+                    "telefono": t,
+                    "vendedor_id": id_del_vendedor_actual  # 👈 Amarre físico del cliente con el vendedor
+                }).execute()
+                
+                st.success("Cliente guardado exitosamente.")
 
 elif choice == "Nueva Venta":
     st.header("Generar Venta y Registro de Costos")
-       # Mostrar la sede en la que se está operando
+    # Mostrar la sede en la que se está operando
     st.info(f"Registrando venta para la sede: **{nombre_sede}**")
     
     if st.session_state.get('venta_finalizada'):
@@ -444,8 +436,15 @@ elif choice == "Nueva Venta":
         if st.button("Registrar Nueva Venta"):
             st.session_state.venta_finalizada = False; st.session_state.pdf_path = None; st.rerun()
     else:
-        # Los clientes se consultan globalmente, pero la venta se marcará con la sede del usuario
-        res_c = supabase.table("clientes").select("*").execute()
+        # -------------------------------------------------------------------------
+        # CONTROL DE AUDITORÍA: El Administrador ve todo, el Vendedor solo lo suyo
+        # -------------------------------------------------------------------------
+        if es_admin:
+            res_c = supabase.table("clientes").select("*").execute()
+        else:
+            id_del_vendedor_actual = st.session_state.user_perfil.get('id')
+            res_c = supabase.table("clientes").select("*").eq("vendedor_id", id_del_vendedor_actual).execute()
+            
         if res_c.data:
             dict_c = {f"{cli['nombre']} ({cli['cedula']})": cli for cli in res_c.data}
             # Buscador de cliente para nueva venta
