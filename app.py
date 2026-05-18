@@ -437,7 +437,7 @@ elif choice == "Nueva Venta":
             st.session_state.venta_finalizada = False; st.session_state.pdf_path = None; st.rerun()
     else:
         # -------------------------------------------------------------------------
-        # CONTROL DE AUDITORÍA: El Administrador ve todo, el Vendedor solo lo suyo
+        # CONTROL DE AUDITORÍA: El Admin ve todo, el Vendedor solo lo suyo
         # -------------------------------------------------------------------------
         if es_admin:
             res_c = supabase.table("clientes").select("*").execute()
@@ -447,14 +447,31 @@ elif choice == "Nueva Venta":
             
         if res_c.data:
             dict_c = {f"{cli['nombre']} ({cli['cedula']})": cli for cli in res_c.data}
-            # Buscador de cliente para nueva venta
-            sel_c_input = st.selectbox("Seleccione Cliente", list(dict_c.keys())); dat_c = dict_c[sel_c_input]
+            
+            # -------------------------------------------------------------------------
+            # IMPLEMENTACIÓN DEL BUSCADOR REAL (Filtrado dinámico en caliente)
+            # -------------------------------------------------------------------------
+            busqueda = st.text_input("🔍 Buscar Cliente (Escriba Nombre o Cédula):").lower()
+            
+            # Filtramos las opciones del diccionario según lo que el usuario digite
+            opciones_filtradas = [
+                opcion for opcion in dict_c.keys() 
+                if busqueda in opcion.lower()
+            ]
+            
+            # Si la búsqueda no arroja resultados, por seguridad mostramos la lista completa para no romper el flujo
+            if not opciones_filtradas:
+                opciones_filtradas = list(dict_c.keys())
+                
+            sel_c_input = st.selectbox("Seleccione Cliente", opciones_filtradas)
+            dat_c = dict_c[sel_c_input]
+            # -------------------------------------------------------------------------
             
             v1, v2, v3 = st.columns(3)
             with v1:
                 art = st.text_input("Artículo/Producto"); precio = st.number_input("Precio Venta Total", min_value=0, step=1000)
             with v2:
-                inic = st.number_input("Cuota Inicial", min_value=0, step=1000);
+                inic = st.number_input("Cuota Inicial", min_value=0, step=1000)
                 n_cuo = st.number_input("Número de Cuotas", min_value=1, value=5)
             with v3:
                 fecha_v = st.date_input("Fecha Real de la Venta", value=datetime.now().date())
@@ -501,7 +518,7 @@ elif choice == "Nueva Venta":
                             "numero_cuota": fila['Cuota'], 
                             "fecha_vencimiento": str(fila['Fecha Vencimiento']), 
                             "monto": fila['Monto'],
-                            "sede_id": mi_sede_id # Inyección de la sede
+                            "sede_id": mi_sede_id  # Inyección de la sede
                         }).execute()
                         
                     st.session_state.pdf_path = generar_pdf_contrato({"producto": art, "monto_total": precio, "cuota_inicial": inic}, df_cuo, dat_c, v_id)
