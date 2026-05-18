@@ -408,20 +408,29 @@ elif choice == "Registrar Cliente":
             if n and c_cc:
                 
                 # -------------------------------------------------------------------------
-                # INYECCIÓN SOLICITADA: Extraer el ID del vendedor logueado desde el perfil
+                # AJUSTE ADICIONAL: Verificar si la cédula ya existe en la empresa a nivel global
                 # -------------------------------------------------------------------------
-                id_del_vendedor_actual = st.session_state.user_perfil.get('id')
+                existe_cliente = supabase.table("clientes").select("id").eq("cedula", c_cc).execute()
                 
-                # Se agrega 'vendedor_id' al diccionario de inserción nativo
-                supabase.table("clientes").insert({
-                    "nombre": n, 
-                    "cedula": c_cc, 
-                    "direccion": d, 
-                    "telefono": t,
-                    "vendedor_id": id_del_vendedor_actual  # 👈 Amarre físico del cliente con el vendedor
-                }).execute()
-                
-                st.success("Cliente guardado exitosamente.")
+                if existe_cliente.data:
+                    # Si el registro ya existe en el sistema, frena el insert y avisa al vendedor
+                    st.error("⚠️ Este cliente ya se encuentra registrado en el sistema de la empresa. Por políticas de cartera, no puede ser duplicado.")
+                else:
+                    # -------------------------------------------------------------------------
+                    # INYECCIÓN SOLICITADA: Extraer el ID del vendedor logueado desde el perfil
+                    # -------------------------------------------------------------------------
+                    id_del_vendedor_actual = st.session_state.user_perfil.get('id')
+                    
+                    # Se agrega 'vendedor_id' al diccionario de inserción nativo
+                    supabase.table("clientes").insert({
+                        "nombre": n, 
+                        "cedula": c_cc, 
+                        "direccion": d, 
+                        "telefono": t,
+                        "vendedor_id": id_del_vendedor_actual  # 👈 Amarre físico del cliente con el vendedor
+                    }).execute()
+                    
+                    st.success("Cliente guardado exitosamente.")
 
 elif choice == "Nueva Venta":
     st.header("Generar Venta y Registro de Costos")
