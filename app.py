@@ -448,53 +448,102 @@ elif choice == "Nueva Venta":
         if res_c.data:
             dict_c = {f"{cli['nombre']} ({cli['cedula']})": cli for cli in res_c.data}
             
-            # -------------------------------------------------------------------------
-            # IMPLEMENTACIÓN DEL BUSCADOR REAL (Filtrado dinámico en caliente)
-            # -------------------------------------------------------------------------
+            # Buscador de cliente (Filtrado dinámico en caliente)
             busqueda = st.text_input("🔍 Buscar Cliente (Escriba Nombre o Cédula):").lower()
             
-            # Filtramos las opciones del diccionario según lo que el usuario digite
             opciones_filtradas = [
                 opcion for opcion in dict_c.keys() 
                 if busqueda in opcion.lower()
             ]
             
-            # Si la búsqueda no arroja resultados, por seguridad mostramos la lista completa para no romper el flujo
             if not opciones_filtradas:
                 opciones_filtradas = list(dict_c.keys())
                 
             sel_c_input = st.selectbox("Seleccione Cliente", opciones_filtradas)
             dat_c = dict_c[sel_c_input]
-            # -------------------------------------------------------------------------
             
+            # -------------------------------------------------------------------------
+            # FUNCIONES AUXILIARES INTERNAS: Formateo y Limpieza de Moneda
+            # -------------------------------------------------------------------------
+            def parsear_moneda(texto):
+                """Remueve signos, puntos y comas para extraer el entero puro."""
+                if not texto:
+                    return 0
+                limpio = "".join(c for c in str(texto) if c.isdigit())
+                return int(limpio) if limpio else 0
+
+            def formatear_moneda(valor):
+                """Convierte un entero a formato moneda legible."""
+                return f"$ {valor:,.0f}".replace(",", ".")
+
             v1, v2, v3 = st.columns(3)
             with v1:
-                art = st.text_input("Artículo/Producto"); precio = st.number_input("Precio Venta Total", min_value=0, step=1000)
+                art = st.text_input("Artículo/Producto")
+                
+                precio_raw = st.text_input("Precio Venta Total", value="$ 0")
+                precio = parsear_moneda(precio_raw)
+                if precio_raw and precio_raw != formatear_moneda(precio):
+                    st.caption(f"Valor interpretado: {formatear_moneda(precio)}")
+                    
             with v2:
-                inic = st.number_input("Cuota Inicial", min_value=0, step=1000)
-                n_cuo = st.number_input("Número de Cuotas", min_value=1, value=5)
+                inic_raw = st.text_input("Cuota Inicial", value="$ 0")
+                inic = parsear_moneda(inic_raw)
+                if inic_raw and inic_raw != formatear_moneda(inic):
+                    st.caption(f"Valor interpretado: {formatear_moneda(inic)}")
+                    
+                n_cuo = st.number_input("Número de Cuotas", min_value=1, value=5, format="%d")
             with v3:
                 fecha_v = st.date_input("Fecha Real de la Venta", value=datetime.now().date())
             
             st.subheader("Costos y Gastos Operativos")
             co1, co2, co3, co4 = st.columns(4)
-            c_comp = co1.number_input("Costo Compra", min_value=0); c_tran = co2.number_input("Transporte", min_value=0)
-            c_pape = co3.number_input("Papelería", min_value=0); c_otro = co4.number_input("Otros Gastos", min_value=0)
+            
+            # -------------------------------------------------------------------------
+            # AJUSTE VISUAL: Adición de st.caption para todos los Costos y Gastos
+            # -------------------------------------------------------------------------
+            c_comp_raw = co1.text_input("Costo Compra", value="$ 0")
+            c_comp = parsear_moneda(c_comp_raw)
+            if c_comp_raw and c_comp_raw != formatear_moneda(c_comp):
+                co1.caption(f"Valor: {formatear_moneda(c_comp)}")
+            
+            c_tran_raw = co2.text_input("Transporte", value="$ 0")
+            c_tran = parsear_moneda(c_tran_raw)
+            if c_tran_raw and c_tran_raw != formatear_moneda(c_tran):
+                co2.caption(f"Valor: {formatear_moneda(c_tran)}")
+            
+            c_pape_raw = co3.text_input("Papelería", value="$ 0")
+            c_pape = parsear_moneda(c_pape_raw)
+            if c_pape_raw and c_pape_raw != formatear_moneda(c_pape):
+                co3.caption(f"Valor: {formatear_moneda(c_pape)}")
+            
+            c_otro_raw = co4.text_input("Otros Gastos", value="$ 0")
+            c_otro = parsear_moneda(c_otro_raw)
+            if c_otro_raw and c_otro_raw != formatear_moneda(c_otro):
+                co4.caption(f"Valor: {formatear_moneda(c_otro)}")
+            # -------------------------------------------------------------------------
             
             sal = precio - inic
             df_cuo = pd.DataFrame([{"Cuota": i+1, "Fecha Vencimiento": (fecha_v + timedelta(days=(i+1)*15)), "Monto": sal/n_cuo} for i in range(n_cuo)])
-            st.dataframe(df_cuo, use_container_width=True, hide_index=True)
+            
+            # Renderizar la tabla de cuotas en formato moneda
+            st.dataframe(
+                df_cuo, 
+                use_container_width=True, 
+                hide_index=True,
+                column_config={
+                    "Monto": st.column_config.NumberColumn(
+                        "Monto",
+                        format="$ %,.0f"
+                    )
+                }
+            )
             
             if st.button("Finalizar y Registrar Venta", type="primary"):
                 if precio > 0 and art:
                     
-                    # -------------------------------------------------------------------------
-                    # SOLUCIÓN TÉCNICA: Definición de variable para evitar NameError en local
-                    # Extrae el ID del usuario logueado almacenado en el estado de la sesión
-                    # -------------------------------------------------------------------------
                     id_del_vendedor_actual = st.session_state.user_perfil.get('id')
                     
-                    # Se agrega 'sede_id' al insert de la tabla ventas
+                    # Se ejecuta el insert conservando el tipo de dato numérico entero
                     v_ins = supabase.table("ventas").insert({
                         "cliente_id": dat_c['id'], 
                         "producto": art, 
@@ -669,7 +718,7 @@ elif choice == "Historial de Ventas":
         else:
             for seleccion in filtered_hist:
                 r = opciones_hist[seleccion]
-                with st.expanders if hasattr(st, "expanders") else st.expander(seleccion):
+                with st.expander(seleccion):
                     c_h1, c_h2 = st.columns([1, 1])
                     with c_h1:
                         st.write(f"**Venta:** ${int(r['monto_total']):,} | **Costo:** ${int(r['costo_compra']):,}")
@@ -690,24 +739,11 @@ elif choice == "Historial de Ventas":
                             file_doc = st.file_uploader(f"Cédula Cliente (ID {r['id']})", type=['pdf', 'jpg', 'png'], key=f"doc_{r['id']}")
                             if file_doc and st.button("Subir Cédula", key=f"btn_doc_{r['id']}"):
                                 path_doc = f"cedulas/c_{r['id']}_{file_doc.name}"
-                                
-                                # -------------------------------------------------------------------------
-                                # CONTROL BLINDADO: Upload con Fallback automático a Update para Cédulas
-                                # -------------------------------------------------------------------------
-                                try:
-                                    supabase.storage.from_("soportes").upload(
-                                        path=str(path_doc), 
-                                        file=file_doc.getvalue()
-                                    )
-                                except Exception:
-                                    try:
-                                        supabase.storage.from_("soportes").update(
-                                            path=str(path_doc), 
-                                            file=file_doc.getvalue()
-                                        )
-                                    except Exception as e_deep:
-                                        st.error(f"Error crítico en almacenamiento: {str(e_deep)}")
-                                        
+                                supabase.storage.from_("soportes").upload(
+                                    path=path_doc, 
+                                    file=file_doc.getvalue(),
+                                    file_options={"content-type": file_doc.type, "upsert": "true"}
+                                )
                                 supabase.table("ventas").update({"doc_cliente_path": path_doc}).eq("id", r['id']).execute()
                                 st.success("Cédula cargada.")
                                 st.rerun() 
@@ -721,24 +757,11 @@ elif choice == "Historial de Ventas":
                             file_fac = st.file_uploader(f"Factura Compra (ID {r['id']})", type=['pdf', 'jpg', 'png'], key=f"fac_{r['id']}")
                             if file_fac and st.button("Subir Factura", key=f"btn_fac_{r['id']}"):
                                 path_fac = f"facturas/f_{r['id']}_{file_fac.name}"
-                                
-                                # -------------------------------------------------------------------------
-                                # CONTROL BLINDADO: Upload con Fallback automático a Update para Facturas
-                                # -------------------------------------------------------------------------
-                                try:
-                                    supabase.storage.from_("soportes").upload(
-                                        path=str(path_fac), 
-                                        file=file_fac.getvalue()
-                                    )
-                                except Exception:
-                                    try:
-                                        supabase.storage.from_("soportes").update(
-                                            path=str(path_fac), 
-                                            file=file_fac.getvalue()
-                                        )
-                                    except Exception as e_deep:
-                                        st.error(f"Error crítico en almacenamiento: {str(e_deep)}")
-                                        
+                                supabase.storage.from_("soportes").upload(
+                                    path=path_fac, 
+                                    file=file_fac.getvalue(),
+                                    file_options={"content-type": file_fac.type, "upsert": "true"}
+                                )
                                 supabase.table("ventas").update({"fac_compra_path": path_fac}).eq("id", r['id']).execute()
                                 st.success("Factura cargada.")
                                 st.rerun() 
@@ -771,7 +794,7 @@ elif choice == "Historial de Ventas":
                         if st.button(f"Generar Contrato Firmado #{r['id']}", key=f"f_btn_{r['id']}"):
                             if canvas_result.image_data is not None:
                                 img = Image.fromarray(canvas_result.image_data.astype('uint8'), 'RGBA')
-                               
+                                
                                 # Captura de evidencia para auditoría
                                 metadatos_audit = {
                                     "ip": socket.gethostbyname(socket.gethostname()), 
