@@ -710,8 +710,7 @@ elif choice == "Historial de Ventas":
                                 path_fac = f"facturas/f_{r['id']}_{file_fac.name}"
                                 supabase.storage.from_("soportes").upload(
                                     path=str(path_fac), 
-                                    file=file_fac.getvalue(),
-                                    }
+                                    file=file_fac.getvalue(),                                    }
                                 )
                                 supabase.table("ventas").update({"fac_compra_path": path_fac}).eq("id", r['id']).execute()
                                 st.success("Factura cargada.")
