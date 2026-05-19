@@ -710,7 +710,7 @@ elif choice == "Historial de Ventas":
                                 path_fac = f"facturas/f_{r['id']}_{file_fac.name}"
                                 supabase.storage.from_("soportes").upload(
                                     path=str(path_fac), 
-                                    file=file_fac.getvalue()
+                                    file=file_fac.getvalue(),
                                     file_options={
                                     "content-type": str(file_fac.type), 
                                     "x-upsert": "true"  # 👈 Formato alternativo estricto en string para evitar colisiones en httpx
