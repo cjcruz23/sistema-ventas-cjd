@@ -669,7 +669,7 @@ elif choice == "Historial de Ventas":
         else:
             for seleccion in filtered_hist:
                 r = opciones_hist[seleccion]
-                with st.expander(seleccion):
+                with st.expanders if hasattr(st, "expanders") else st.expander(seleccion):
                     c_h1, c_h2 = st.columns([1, 1])
                     with c_h1:
                         st.write(f"**Venta:** ${int(r['monto_total']):,} | **Costo:** ${int(r['costo_compra']):,}")
@@ -690,11 +690,24 @@ elif choice == "Historial de Ventas":
                             file_doc = st.file_uploader(f"Cédula Cliente (ID {r['id']})", type=['pdf', 'jpg', 'png'], key=f"doc_{r['id']}")
                             if file_doc and st.button("Subir Cédula", key=f"btn_doc_{r['id']}"):
                                 path_doc = f"cedulas/c_{r['id']}_{file_doc.name}"
-                                supabase.storage.from_("soportes").upload(
-                                    path=path_doc, 
-                                    file=file_doc.getvalue(),
-                                    file_options={"content-type": file_doc.type, "upsert": "true"}
-                                )
+                                
+                                # -------------------------------------------------------------------------
+                                # CONTROL BLINDADO: Upload con Fallback automático a Update para Cédulas
+                                # -------------------------------------------------------------------------
+                                try:
+                                    supabase.storage.from_("soportes").upload(
+                                        path=str(path_doc), 
+                                        file=file_doc.getvalue()
+                                    )
+                                except Exception:
+                                    try:
+                                        supabase.storage.from_("soportes").update(
+                                            path=str(path_doc), 
+                                            file=file_doc.getvalue()
+                                        )
+                                    except Exception as e_deep:
+                                        st.error(f"Error crítico en almacenamiento: {str(e_deep)}")
+                                        
                                 supabase.table("ventas").update({"doc_cliente_path": path_doc}).eq("id", r['id']).execute()
                                 st.success("Cédula cargada.")
                                 st.rerun() 
@@ -708,14 +721,24 @@ elif choice == "Historial de Ventas":
                             file_fac = st.file_uploader(f"Factura Compra (ID {r['id']})", type=['pdf', 'jpg', 'png'], key=f"fac_{r['id']}")
                             if file_fac and st.button("Subir Factura", key=f"btn_fac_{r['id']}"):
                                 path_fac = f"facturas/f_{r['id']}_{file_fac.name}"
-                                supabase.storage.from_("soportes").upload(
-                                    path=str(path_fac), 
-                                    file=file_fac.getvalue(),
-                                    file_options={
-                                    "content-type": str(file_fac.type), 
-                                    "x-upsert": "true"  # 👈 Formato alternativo estricto en string para evitar colisiones en httpx
-                                     }                                   
-                                )
+                                
+                                # -------------------------------------------------------------------------
+                                # CONTROL BLINDADO: Upload con Fallback automático a Update para Facturas
+                                # -------------------------------------------------------------------------
+                                try:
+                                    supabase.storage.from_("soportes").upload(
+                                        path=str(path_fac), 
+                                        file=file_fac.getvalue()
+                                    )
+                                except Exception:
+                                    try:
+                                        supabase.storage.from_("soportes").update(
+                                            path=str(path_fac), 
+                                            file=file_fac.getvalue()
+                                        )
+                                    except Exception as e_deep:
+                                        st.error(f"Error crítico en almacenamiento: {str(e_deep)}")
+                                        
                                 supabase.table("ventas").update({"fac_compra_path": path_fac}).eq("id", r['id']).execute()
                                 st.success("Factura cargada.")
                                 st.rerun() 
@@ -748,7 +771,7 @@ elif choice == "Historial de Ventas":
                         if st.button(f"Generar Contrato Firmado #{r['id']}", key=f"f_btn_{r['id']}"):
                             if canvas_result.image_data is not None:
                                 img = Image.fromarray(canvas_result.image_data.astype('uint8'), 'RGBA')
-                                
+                               
                                 # Captura de evidencia para auditoría
                                 metadatos_audit = {
                                     "ip": socket.gethostbyname(socket.gethostname()), 
