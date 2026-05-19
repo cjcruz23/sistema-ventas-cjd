@@ -709,7 +709,7 @@ elif choice == "Historial de Ventas":
                             if file_fac and st.button("Subir Factura", key=f"btn_fac_{r['id']}"):
                                 path_fac = f"facturas/f_{r['id']}_{file_fac.name}"
                                 supabase.storage.from_("soportes").upload(
-                                    path=path_fac, 
+                                    path=str(path_fac), 
                                     file=file_fac.getvalue(),
                                     file_options={"content-type": file_fac.type, "upsert": "true"}
                                 )
