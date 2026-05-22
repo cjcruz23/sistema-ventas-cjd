@@ -330,10 +330,11 @@ if choice == "📊 Tablero de Control":
     # Si es administrador, descarga todo. Si es operativo, filtra por su sede_id.
     if es_admin:
         v_res = supabase.table("ventas").select("*, sedes(nombre)").execute()
-        p_res = supabase.table("plan_pagos").select("*, ventas!inner(sede_id)").execute()
+        # Se descarga la información relacionada para la auditoría de mora detallada
+        p_res = supabase.table("plan_pagos").select("*, ventas!inner(sede_id, producto, cliente_id, clientes(*))").execute()
     else:
         v_res = supabase.table("ventas").select("*, sedes(nombre)").eq("sede_id", mi_sede_id).execute()
-        p_res = supabase.table("plan_pagos").select("*, ventas!inner(sede_id)").eq("ventas.sede_id", mi_sede_id).execute()
+        p_res = supabase.table("plan_pagos").select("*, ventas!inner(sede_id, producto, cliente_id, clientes(*))").eq("ventas.sede_id", mi_sede_id).execute()
         
     if v_res.data and p_res.data:
         df_v = pd.DataFrame(v_res.data)
@@ -346,18 +347,69 @@ if choice == "📊 Tablero de Control":
                            df_v['gasto_papeleria'].sum() + 
                            df_v['gasto_otros'].sum())
         utilidad = total_v - total_costos_op
+        
+        # Recaudado original basado en la sumatoria numérica de montos pagados de cuotas + iniciales
         recaudado = df_p['pagado'].sum() + df_v['cuota_inicial'].sum()
         calle = total_v - recaudado
         
-        # --- INTERFAZ DE MÉTRICAS PRINCIPALES ---
-        c1, c2, c3, c4 = st.columns(4)
+        # --- NUEVO CÁLCULO: CARTERA VENCIDA Y DESGLOSE DETALLADO ---
+        fecha_actual_str = datetime.now().strftime("%Y-%m-%d")
+        
+        # Definición de Mora: Cuota no pagada (monto > pagado) Y fecha_vencimiento menor a hoy
+        # Se asume que si el valor de la cuota ('monto') es mayor a lo abonado ('pagado'), hay saldo pendiente
+        df_p['saldo_pendiente_cuota'] = df_p['monto'] - df_p['pagado']
+        df_mora = df_p[(df_p['saldo_pendiente_cuota'] > 0) & (df_p['fecha_vencimiento'] < fecha_actual_str)]
+        cartera_vencida = df_mora['saldo_pendiente_cuota'].sum()
+        
+        datos_mora_detallada = []
+        for _, fila in df_mora.iterrows():
+            venta_info = fila.get("ventas") or {}
+            cliente_info = venta_info.get("clientes") or {}
+            
+            datos_mora_detallada.append({
+                "Cliente": cliente_info.get("nombre", "N/A"),
+                "Cédula/NIT": cliente_info.get("cedula", "N/A"),
+                "Producto/Venta": venta_info.get("producto", f"Venta #{fila.get('venta_id')}"),
+                "N° Cuota": fila.get("numero_cuota", 1),
+                "Valor Cuota Pending": f"${int(fila['saldo_pendiente_cuota']):,}",
+                "Fecha Vencimiento": fila.get("fecha_vencimiento", "N/A")
+            })
+        
+        # --- INTERFAZ DE MÉTRICAS PRINCIPALES (5 COLUMNAS) ---
+        c1, c2, c3, c4, c5 = st.columns(5)
         c1.metric("Ventas Totales", f"${int(total_v):,}")
         c2.metric("Costos Totales", f"${int(total_costos_op):,}") 
         c3.metric("Capital en Calle", f"${int(calle):,}", delta_color="inverse")
         c4.metric("Efectivo Recaudado", f"${int(recaudado):,}")
+        # Nueva métrica visual de riesgo financiero
+        c5.metric("⚠️ Cartera Vencida", f"${int(cartera_vencida):,}", delta=f"-${int(cartera_vencida):,}" if cartera_vencida > 0 else None, delta_color="inverse")
         
         st.divider()
         st.metric("Utilidad Bruta Proyectada", f"${int(utilidad):,}")
+        
+        # -------------------------------------------------------------------------
+        # NUEVA SECCIÓN: DETALLE DE CUENTAS EN MORA (REQUERIDO)
+        # -------------------------------------------------------------------------
+        st.subheader("📋 Auditoría Detallada de Cartera Vencida")
+        if datos_mora_detallada:
+            with st.expander(f"🔍 Ver desglose de cuentas en mora ({len(datos_mora_detallada)} cuotas vencidas)", expanded=False):
+                df_mora_final = pd.DataFrame(datos_mora_detallada)
+                df_mora_final = df_mora_final.sort_values(by="Fecha Vencimiento", ascending=True)
+                st.dataframe(df_mora_final, use_container_width=True, hide_index=True)
+                
+                # Exportación ágil para operaciones de cobranza externa
+                csv = df_mora_final.to_csv(index=False).encode('utf-8')
+                st.download_button(
+                    label="📥 Exportar Reporte de Mora (CSV)",
+                    data=csv,
+                    file_name=f"Reporte_Cartera_Vencida_{fecha_actual_str}.csv",
+                    mime="text/csv",
+                    key="btn_descarga_mora"
+                )
+        else:
+            st.success("✅ Control Interno: No se registran cuotas vencidas en esta sede.")
+            
+        st.divider()
         
         # --- NUEVA SECCIÓN: CONSOLIDADO DISCRIMINADO POR SEDES (SOLO PARA ADMIN) ---
         if es_admin:
