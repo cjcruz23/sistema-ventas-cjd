@@ -6,3 +6,4 @@ fpdf
 pillow
 streamlit-drawable-canvas
 requests
+streamlit-option-menu==0.3.6
