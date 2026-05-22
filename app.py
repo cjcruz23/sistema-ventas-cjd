@@ -1,3 +1,48 @@
+import socket
+import streamlit as st
+
+def registrar_log(accion, modulo, detalle):
+    """
+    Registra de forma asíncrona un evento de auditoría en la base de datos.
+    Saca el usuario y rol mapeando directamente el diccionario 'user_perfil' existente.
+    """
+    try:
+        # -------------------------------------------------------------------------
+        # CORRECCIÓN DE MAPEO: Extracción desde la estructura real de su software
+        # -------------------------------------------------------------------------
+        perfil = st.session_state.get("user_perfil", {})
+        
+        # Extraemos el correo o el nombre del perfil logueado
+        usuario_correo = perfil.get("correo") or perfil.get("email") or perfil.get("nombre", "Anónimo")
+        
+        # Extraemos el rol (asegúrese de si su llave se llama 'rol', 'tipo_usuario' o 'perfil')
+        rol_usuario = perfil.get("rol") or perfil.get("tipo_usuario", "Asesor")
+        
+        # Extraemos el ID de la sede si aplica
+        sede_id = perfil.get("sede_id") or st.session_state.get("mi_sede_id", None)
+        
+        # Captura básica de IP local
+        try:
+            ip_origen = socket.gethostbyname(socket.gethostname())
+        except Exception:
+            ip_origen = "127.0.0.1"
+            
+        payload = {
+            "usuario_correo": usuario_correo,
+            "rol_usuario": rol_usuario,
+            "sede_id": sede_id,
+            "accion": accion,
+            "modulo": modulo,
+            "detalle": detalle,
+            "ip_origen": ip_origen
+        }
+        
+        # Inserción directa en la tabla de auditoría de Supabase
+        supabase.table("logs_auditoria").insert(payload).execute()
+    except Exception as e_log:
+        # Evita que un fallo en la auditoría rompa la experiencia del usuario
+        print(f"Error crítico registrando auditoría: {str(e_log)}")
+        
 import streamlit as st
 from supabase import create_client, Client
 import pandas as pd
@@ -312,9 +357,67 @@ def generar_recibo_caja(cliente, monto, metodo, producto):
         recibo.output(tmp.name)
         return tmp.name
 
-st.sidebar.title("Administración CJ&D")
-menu = ["📊 Tablero de Control", "Registrar Cliente", "Nueva Venta", "Control de Cartera", "Historial de Ventas", "Gestión de Cobranza", "Configuración y Datos"]
-choice = st.sidebar.selectbox("Acción", menu)
+from streamlit_option_menu import option_menu
+
+# -------------------------------------------------------------------------
+# BARRA LATERAL: DISEÑO EJECUTIVO PREMIUM (CLARO / CORPORATIVO)
+# -------------------------------------------------------------------------
+with st.sidebar:
+    st.markdown(f"### 🏢 Administración CJ&D")
+    st.write("---")
+    
+    # Renderizado del menú con la nueva paleta de colores "Executive Light"
+    choice = option_menu(
+        menu_title=None, # Eliminamos el título interno para mayor limpieza
+        options=[
+            "📊 Tablero de Control", 
+            "Registrar Cliente", 
+            "Nueva Venta", 
+            "Control de Cartera", 
+            "Historial de Ventas", 
+            "Gestión de Cobranza", 
+            "Configuración y Datos", 
+            "🕵️ Auditoría de Transacciones"
+        ],
+        icons=[
+            "graph-up",       # Tablero
+            "person-add",     # Cliente
+            "cart-check",     # Venta
+            "safe2",          # Cartera
+            "clock-history",  # Historial
+            "cash-stack",     # Cobranza
+            "sliders",        # Config
+            "fingerprint"     # Auditoría
+        ],
+        menu_icon="cast", 
+        default_index=0,
+        styles={
+            "container": {
+                "padding": "0!important", 
+                "background-color": "#f8fafc", # Slate 50 (Blanco azulado muy sutil)
+                "border-radius": "0px"
+            },
+            "icon": {
+                "color": "#0284c7", # Blue 700 (Azul Corporativo)
+                "font-size": "18px"
+            }, 
+            "nav-link": {
+                "font-size": "14px", 
+                "text-align": "left", 
+                "margin": "5px", 
+                "color": "#1e293b", # Slate 800 (Texto casi negro profesional)
+                "--hover-color": "#f1f5f9" # Slate 100
+            },
+            "nav-link-selected": {
+                "background-color": "#0284c7", # Resaltado en Azul Corporativo
+                "color": "#ffffff", # Texto blanco en la selección
+                "font-weight": "600"
+            },
+        }
+    )
+    
+    st.write("---")
+    
 
 if choice != "Nueva Venta":
     st.session_state.venta_finalizada = False
@@ -474,7 +577,84 @@ elif choice == "Registrar Cliente":
                     "vendedor_id": id_del_vendedor_actual  # 👈 Amarre físico del cliente con el vendedor
                 }).execute()
                 
+                # -------------------------------------------------------------------------
+                # AUDITORÍA MÁSTER: Captura del evento de creación
+                # -------------------------------------------------------------------------
+                registrar_log(
+                    accion="CREACIÓN",
+                    modulo="Clientes",
+                    detalle=f"Se registró un nuevo cliente de forma exitosa. Nombre: {n} | Cédula/NIT: {c_cc}"
+                )
+                
                 st.success("Cliente guardado exitosamente.")
+
+elif choice == "🕵️ Auditoría de Transacciones":
+    if not es_admin:
+        st.error("🔒 Acceso Restringido. Este módulo requiere privilegios de Administrador del Sistema.")
+    else:
+        st.header("🕵️ Auditoría Máster y Log de Transacciones")
+        st.info("Monitoreo en tiempo real de movimientos, alteraciones de registros y accesos a la plataforma.")
+        
+        # --- FILTROS DE AUDITORÍA EN TIEMPO REAL ---
+        c_l1, c_l2, c_l3 = st.columns(3)
+        with c_l1:
+            filtro_modulo = st.selectbox("Filtrar por Módulo", ["Todos", "Ventas", "Soportes", "Firma Contrato", "Usuarios"])
+        with c_l2:
+            filtro_accion = st.selectbox("Filtrar por Acción", ["Todas", "CREACIÓN", "MODIFICACIÓN", "ELIMINACIÓN"])
+        with c_l3:
+            busqueda_usuario = st.text_input("🔍 Buscar por Correo de Asesor")
+            
+        # --- CONSTRUCCIÓN DE LA CONSULTA ---
+        query_logs = supabase.table("logs_auditoria").select("*, sedes(nombre)")
+        
+        if filtro_modulo != "Todos":
+            query_logs = query_logs.eq("modulo", filtro_modulo)
+        if filtro_accion != "Todas":
+            query_logs = query_logs.eq("accion", filtro_accion)
+            
+        res_logs = query_logs.order("fecha_registro", desc=True).limit(500).execute()
+        
+        if res_logs.data:
+            # Procesamiento de la información con Pandas
+            df_logs = pd.DataFrame(res_logs.data)
+            
+            # Extraer el nombre de la sede de forma limpia
+            df_logs['Sede Suministros'] = df_logs['sedes'].apply(lambda x: x['nombre'] if isinstance(x, dict) else "Sede General")
+            
+            # Formatear la fecha para facilitar la lectura del auditor
+            df_logs['Fecha/Hora'] = pd.to_datetime(df_logs['fecha_registro']).dt.strftime('%Y-%m-%d %H:%M:%S')
+            
+            # Estructurar las columnas del reporte definitivo
+            df_logs_visual = df_logs[[
+                'Fecha/Hora', 'usuario_correo', 'rol_usuario', 
+                'Sede Suministros', 'accion', 'modulo', 'detalle', 'ip_origen'
+            ]].rename(columns={
+                'usuario_correo': 'Usuario Ejecutor',
+                'rol_usuario': 'Rol',
+                'accion': 'Operación',
+                'modulo': 'Módulo',
+                'detalle': 'Detalle del Movimiento',
+                'ip_origen': 'Dirección IP'
+            })
+            
+            # Aplicar filtro de texto por usuario si se digita algo en el input
+            if busqueda_usuario:
+                df_logs_visual = df_logs_visual[df_logs_visual['Usuario Ejecutor'].str.contains(busqueda_usuario, case=False)]
+                
+            # --- DESPLIEGUE DATAFRAME ---
+            st.dataframe(df_logs_visual, use_container_width=True, hide_index=True)
+            
+            # --- EXPORTACIÓN DE EVIDENCIA ---
+            csv_logs = df_logs_visual.to_csv(index=False).encode('utf-8')
+            st.download_button(
+                label="📥 Descargar Historial de Auditoría (CSV)",
+                data=csv_logs,
+                file_name=f"Log_Transacciones_Auditoría_{datetime.now().strftime('%Y%m%d')}.csv",
+                mime="text/csv",
+                key="btn_descarga_logs"
+            )
+        else:
+            st.warning("No se encontraron registros de auditoría bajo los parámetros seleccionados.")
 
 elif choice == "Nueva Venta":
     st.header("Generar Venta y Registro de Costos")
@@ -622,6 +802,22 @@ elif choice == "Nueva Venta":
                             "sede_id": mi_sede_id  # Inyección de la sede
                         }).execute()
                         
+                        # -------------------------------------------------------------------------
+                    # AUDITORÍA MÁSTER: Captura atómica de la transacción comercial
+                    # -------------------------------------------------------------------------
+                    detalle_auditoria = (
+                        f"Nueva operación registrada. Venta ID: #{v_id} | "
+                        f"Cliente: {dat_c['nombre']} ({dat_c['cedula']}) | "
+                        f"Art: {art} | Total: {formatear_moneda(precio)} | "
+                        f"Inicial: {formatear_moneda(inic)} | Cuotas: {n_cuo}"
+                    )
+                    registrar_log(
+                        accion="CREACIÓN",
+                        modulo="Ventas",
+                        detalle=detalle_auditoria
+                    )
+                    # -------------------------------------------------------------------------
+                    
                     st.session_state.pdf_path = generar_pdf_contrato({"producto": art, "monto_total": precio, "cuota_inicial": inic}, df_cuo, dat_c, v_id)
                     st.session_state.venta_finalizada = True; st.rerun()
 
